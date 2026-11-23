@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ToonStudio – Zeichentrick im Browser</title>
+<style>
+  :root {
+    --bg: #1b1e27;
+    --panel: #242836;
+    --panel2: #2c3143;
+    --text: #e8eaf2;
+    --muted: #9aa0b5;
+    --accent: #ff5c7a;
+    --accent2: #4cc9f0;
+    --border: #3a4056;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: .5px; }
+  .logo span { color: var(--accent); }
+  .hint { color: var(--muted); font-size: 12px; margin-left: auto; }
+  #main { display: flex; flex: 1; min-height: 0; }
+
+  #toolbar {
+    width: 76px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 6px;
+    gap: 6px;
+    overflow-y: auto;
+  }
+  .tool-btn {
+    width: 58px; height: 58px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel2);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font-size: 10px;
+  }
+  .tool-btn .ico { font-size: 20px; line-height: 1; }
+  .tool-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tool-btn:hover:not(.active) { border-color: var(--accent2); }
+
+  #stage-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background:
+      radial-gradient(circle at 50% 40%, #232739 0%, #1b1e27 70%);
+  }
+  #canvas-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+  #editor {
+    background: #fff;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    border-radius: 4px;
+    touch-action: none;
+    cursor: crosshair;
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  #playbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+  .pb-btn {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 14px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .pb-btn:hover { border-color: var(--accent2); }
+  .pb-btn.primary { background: var(--accent); border-color: var(--accent); }
+  label.fps { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+
+  #timeline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+    min-height: 118px;
+  }
+  .frame-thumb {
+    position: relative;
+    flex: 0 0 auto;
+    width: 128px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .frame-thumb img, .frame-thumb .empty { display: block; width: 128px; height: 72px; object-fit: contain; background:#fff; }
+  .frame-thumb .num {
+    position: absolute;
+    top: 3px; left: 3px;
+    background: rgba(0,0,0,.6);
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .frame-thumb.active { border-color: var(--accent); }
+  .frame-add {
+    flex: 0 0 auto;
+    width: 90px; height: 76px;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 24px;
+    cursor: pointer;
+  }
+  .frame-add:hover { border-color: var(--accent2); color: var(--accent2); }
+  #panel-right {
+    width: 220px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+  .group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  #swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .swatch { width: 100%; aspect-ratio: 1; border-radius: 6px; border: 2px solid transparent; cursor: pointer; }
+  .swatch.active { border-color: #fff; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=color] { width: 100%; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); cursor: pointer; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+  .row b { color: var(--text); }
+  .act {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 13px;
+    text-align: left;
+  }
+  .act:hover { border-color: var(--accent2); }
+  .act.danger:hover { border-color: var(--accent); color: var(--accent); }
+  .switch { position: relative; width: 40px; height: 22px; flex: 0 0 auto; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; cursor: pointer;
+    background: var(--border); border-radius: 22px; transition: .2s;
+  }
+  .slider:before {
+    content: ""; position: absolute; height: 16px; width: 16px;
+    left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s;
+  }
+  .switch input:checked + .slider { background: var(--accent2); }
+  .switch input:checked + .slider:before { transform: translateX(18px); }
+  #toast {
+    position: fixed;
+    bottom: 150px; left: 50%;
+    transform: translateX(-50%);
+    background: #000c; color: #fff;
+    padding: 10px 18px; border-radius: 10px;
+    font-size: 13px; opacity: 0; pointer-events: none;
+    transition: opacity .3s;
+    z-index: 50;
+  }
+  #toast.show { opacity: 1; }
+  dialog {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px; max-width: 420px; width: 90%;
+  }
+  dialog::backdrop { background: #000a; }
+  dialog h2 { margin-bottom: 10px; font-size: 17px; }
+  dialog p { color: var(--muted); font-size: 13px; line-height: 1.55; margin-bottom: 8px; }
+  dialog kbd {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 6px; font-size: 12px;
+  }
+  @media (max-width: 860px) {
+    #panel-right { position: fixed; right: 0; top: 52px; bottom: 0; z-index: 20; width: 200px; box-shadow: -8px 0 24px rgba(0,0,0,.4); }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎨 Toon<span>Studio</span></div>
+  <div class="hint">Zeichne Folie für Folie – die vorherige Zeichnung wird als transparente Vorlage überlagert.</div>
+</header>
+
+<div id="main">
+  <div id="toolbar"></div>
+
+  <div id="stage-wrap">
+    <div id="canvas-container">
+      <canvas id="editor"></canvas>
+    </div>
+    <div id="playbar">
+      <button class="pb-btn" id="btn-first" title="Erste Folie">⏮</button>
+      <button class="pb-btn" id="btn-prev" title="Zurück (,)">◀</button>
+      <button class="pb-btn primary" id="btn-play" title="Abspielen (Leertaste)">▶ Abspielen</button>
+      <button class="pb-btn" id="btn-next" title="Weiter (.)">▶</button>
+      <label class="fps">Geschwindigkeit
+        <input type="range" id="fps" min="1" max="24" value="8" style="width:110px">
+        <b id="fps-val">8 FPS</b>
+      </label>
+    </div>
+    <div id="timeline"></div>
+  </div>
+
+  <div id="panel-right">
+    <div>
+      <div class="group-title">Farbe</div>
+      <input type="color" id="color" value="#111111">
+      <div id="swatches"></div>
+    </div>
+
+    <div>
+      <div class="group-title">Größe</div>
+      <input type="range" id="size" min="1" max="80" value="6">
+      <div class="row"><span>Stärke</span><b id="size-val">6 px</b></div>
+    </div>
+
+    <div>
+      <div class="group-title">Deckkraft</div>
+      <input type="range" id="opacity" min="5" max="100" value="100">
+      <div class="row"><span>Opacity</span><b id="opacity-val">100 %</b></div>
+    </div>
+
+    <div>
+      <div class="group-title">Onion Skin (Vorlage)</div>
+      <div class="row"><span>Vorherige Folien zeigen</span>
+        <label class="switch"><input type="checkbox" id="onion" checked><span class="slider"></span></label>
+      </div>
+      <input type="range" id="onion-count" min="1" max="4" value="2">
+      <div class="row"><span>Anzahl</span><b id="onion-count-val">2</b></div>
+    </div>
+
+    <div>
+      <div class="group-title">Folie</div>
+      <button class="act" id="btn-dup">⧉ Folie duplizieren</button>
+      <button class="act" id="btn-clear">🧻 Folie leeren</button>
+      <button class="act danger" id="btn-del">🗑 Folie löschen</button>
+    </div>
+
+    <div>
+      <div class="group-title">Projekt</div>
+      <button class="act" id="btn-save">💾 Projekt speichern (.json)</button>
+      <button class="act" id="btn-load">📂 Projekt laden</button>
+      <button class="act" id="btn-help">❓ Hilfe / Tastenkürzel</button>
+    </div>
+
+    <div>
+      <div class="group-title">Export</div>
+      <button class="act" id="btn-export">🎬 Video exportieren (.webm)</button>
+      <button class="act" id="btn-png">🖼 Alle Folien als PNG</button>
+    </div>
+
+    <input type="file" id="file-input" accept=".json" style="display:none">
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<dialog id="helpdlg">
+  <h2>So funktioniert's</h2>
+  <p><b>1.</b> Zeichne deine erste Folie. Wenn du eine neue Folie hinzufügst, siehst du die vorherige Zeichnung als <b>rote Geisterlinie</b> – so zeichnet man flüssige Bewegungen, wie beim klassischen Zeichentrick.</p>
+  <p><b>2.</b> Nutze unterschiedliche Stifte: <b>Stift</b> (klare Linie), <b>Bleistift</b> (kratzig, für Skizzen), <b>Pinsel</b> (weich, deckend), <b>Marker</b> (breit, halbtransparent), den <b>Radierer</b> und das <b>Füllwerkzeug</b>.</p>
+  <p><b>3.</b> Drücke auf <b>Abspielen</b>, um dein Zeichentrickvideo zu prüfen, und exportiere es am Ende als <b>WebM-Video</b>.</p>
+  <p><b>Tastenkürzel:</b> <kbd>B</kbd> Stift · <kbd>P</kbd> Bleistift · <kbd>S</kbd> Pinsel · <kbd>M</kbd> Marker · <kbd>E</kbd> Radierer · <kbd>F</kbd> Füllen · <kbd>Strg+Z</kbd> zurück · <kbd>Strg+Y</kbd> wiederholen · <kbd>←</kbd>/<kbd>→</kbd> Folie wechseln · <kbd>Leertaste</kbd> abspielen · <kbd>N</kbd> neue Folie</p>
+  <p>Diese App ist eine einzelne HTML-Datei: Du kannst sie speichern und <b>völlig offline</b> im Browser öffnen. Es werden keine Daten gesendet.</p>
+  <div style="text-align:right; margin-top:14px">
+    <button class="pb-btn primary" onclick="this.closest('dialog').close()">Alles klar!</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+const W = 960, H = 540;
+const editor = document.getElementById('editor');
+const ctx = editor.getContext('2d');
+
+let frames = [];
+let current = 0;
+let playing = false;
+let playTimer = null;
+let playIndex = 0;
+let fps = 8;
+
+let tool = 'pen';
+let color = '#111111';
+let size = 6;
+let alpha = 1;
+let onion = true;
+let onionCount = 2;
+
+let undoStack = [];
+let redoStack = [];
+
+function makeFrame() {
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  c.getContext('2d').lineJoin = c.getContext('2d').lineCap = 'round';
+  return c;
+}
+
+function fitCanvas() {
+  const wrap = document.getElementById('canvas-container');
+  const s = Math.min(wrap.clientWidth / W, wrap.clientHeight / H) * 0.96;
+  editor.style.width = Math.floor(W * s) + 'px';
+  editor.style.height = Math.floor(H * s) + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function snapshot() {
+  undoStack.push(frames[current].getContext('2d').getImageData(0, 0, W, H));
+  if (undoStack.length > 30) undoStack.shift();
+  redoStack = [];
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(frames[current].getContext('2d').getImageData(0, 0, W, H));
+  const img = undoStack.pop();
+  frames[current].getContext('2d').putImageData(img, 0, 0);
+  render();
+  refreshTimeline();
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(frames[current].getContext('2d').getImageData(0, 0, W, H));
+  const img = redoStack.pop();
+  frames[current].getContext('2d').putImageData(img, 0, 0);
+  render();
+  refreshTimeline();
+}
+
+const TOOLS = [
+  { id: 'pen',    icon: '🖊', label: 'Stift' },
+  { id: 'pencil', icon: '✏️', label: 'Bleistift' },
+  { id: 'brush',  icon: '🖌', label: 'Pinsel' },
+  { id: 'marker', icon: '🖍', label: 'Marker' },
+  { id: 'eraser', icon: '🧽', label: 'Radierer' },
+  { id: 'fill',   icon: '🪣', label: 'Füllen' }
+];
+
+function buildToolbar() {
+  const tb = document.getElementById('toolbar');
+  tb.innerHTML = '';
+  TOOLS.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tool-btn' + (t.id === tool ? ' active' : '');
+    b.innerHTML = `<span class="ico">${t.icon}</span><span>${t.label}</span>`;
+    b.dataset.tool = t.id;
+    b.title = t.label;
+    b.onclick = () => setTool(t.id);
+    tb.appendChild(b);
+  });
+}
+
+function setTool(id) {
+  tool = id;
+  document.querySelectorAll('.tool-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tool === id));
+  editor.style.cursor = id === 'fill' ? 'cell' : 'crosshair';
+}
+
+const COLORS = ['', '#111111', '#ffffff', '#e63946', '#ff9f1c', '#ffd60a',
+  '#2a9d8f', '#4cc9f0', '#3a56d4', '#8338ec', '#ff5c7a', '#8d5524'];
+function buildSwatches() {
+  const box = document.getElementById('swatches');
+  box.innerHTML = '';
+  COLORS.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'swatch';
+    if (c === '') {
+      s.style.background = 'conic-gradient(#f55,#ff5,#5f5,#5ff,#55f,#f5f,#f55)';
+      s.title = 'Regenbogen';
+      s.onclick = () => { hue++; s.style.background = `hsl(${hue % 360},90%,55%)`; setColor(`hsl(${hue % 360},90%,55%)`); };
+    } else {
+      s.style.background = c;
+      s.onclick = () => setColor(c);
+    }
+    box.appendChild(s);
+  });
+  box.children[1].classList.add('active');
+}
+let hue = 210;
+
+function setColor(c) {
+  color = c;
+  document.getElementById('color').value = toHex(c);
+  document.querySelectorAll('.swatch').forEach(x => x.classList.remove('active'));
+}
+
+function toHex(c) {
+  if (c.startsWith('#')) return c;
+  const m = c.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  if (!m) return '#111111';
+  const h = m[1] / 360, s = m[2] / 100, l = m[3] / 100;
+  const f = n => {
+    const k = (n + h * 12) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const v = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+    return Math.round(255 * v).toString(16).padStart(2, '0');
+  };
+  return '#' + f(0) + f(8) + f(4);
+}
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  if (onion && !playing) {
+    for (let i = 1; i <= onionCount; i++) {
+      const f = frames[current - i];
+      if (!f) break;
+      ctx.globalAlpha = 0.28 / i;
+      ctx.drawImage(tint(f, '#ff4d6d'), 0, 0);
+    }
+    const nf = frames[current + 1];
+    if (onionCount > 1 && nf) {
+      ctx.globalAlpha = 0.15;
+      ctx.drawImage(tint(nf, '#4cc9f0'), 0, 0);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.drawImage(frames[current], 0, 0);
+}
+
+const tintCache = new Map();
+function tint(frame, col) {
+  const key = frame._tid || (frame._tid = Math.random().toString(36).slice(2));
+  const ck = key + col;
+  const cached = tintCache.get(ck);
+  if (cached && frame._stamp === tintCache.get(ck + '_s')) return cached;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const cc = c.getContext('2d');
+  cc.drawImage(frame, 0, 0);
+  cc.globalCompositeOperation = 'source-in';
+  cc.fillStyle = col;
+  cc.fillRect(0, 0, W, H);
+  tintCache.set(ck, c);
+  tintCache.set(ck + '_s', frame._stamp || 0);
+  return c;
+}
+function bumpStamp() {
+  frames[current]._stamp = (frames[current]._stamp || 0) + 1;
+  if (tintCache.size > 200) tintCache.clear();
+}
+
+function refreshTimeline() {
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+  frames.forEach((f, i) => {
+    const d = document.createElement('div');
+    d.className = 'frame-thumb' + (i === current ? ' active' : '');
+    const img = document.createElement('img');
+    img.src = f.thumb || '';
+    d.appendChild(img);
+    const n = document.createElement('span');
+    n.className = 'num';
+    n.textContent = i + 1;
+    d.appendChild(n);
+    d.onclick = () => { if (!playing) goto(i); };
+    tl.appendChild(d);
+  });
+  const add = document.createElement('button');
+  add.className = 'frame-add';
+  add.title = 'Neue Folie';
+  add.textContent = '+';
+  add.onclick = addFrame;
+  tl.appendChild(add);
+}
+
+function updateThumb(i) {
+  const t = document.createElement('canvas');
+  t.width = 128; t.height = 72;
+  const tc = t.getContext('2d');
+  tc.fillStyle = '#fff';
+  tc.fillRect(0, 0, 128, 72);
+  tc.drawImage(frames[i], 0, 0, 128, 72);
+  frames[i].thumb = t.toDataURL('image/png');
+}
+
+function goto(i) {
+  if (i < 0 || i >= frames.length) return;
+  current = i;
+  undoStack = []; redoStack = [];
+  render();
+  refreshTimeline();
+}
+
+function addFrame(dup) {
+  snapshotAll();
+  const after = dup ? frames[current] : null;
+  const c = makeFrame();
+  if (dup && after) c.getContext('2d').drawImage(after, 0, 0);
+  frames.splice(current + 1, 0, c);
+  current++;
+  undoStack = []; redoStack = [];
+  render();
+  refreshTimeline();
+}
+
+function clearFrame() {
+  snapshot();
+  frames[current].getContext('2d').clearRect(0, 0, W, H);
+  bumpStamp();
+  render();
+  refreshTimeline();
+}
+
+function deleteFrame() {
+  if (frames.length === 1) { clearFrame(); return; }
+  snapshotAll();
+  frames.splice(current, 1);
+  current = Math.max(0, current - 1);
+  undoStack = []; redoStack = [];
+  render();
+  refreshTimeline();
+}
+
+function snapshotAll() {
+  frames.forEach((f, i) => updateThumb(i));
+}
+
+function play() {
+  if (frames.length < 2) { toast('Füge mindestens 2 Folien hinzu, um ein Video abzuspielen.'); return; }
+  playing = true;
+  playIndex = 0;
+  document.getElementById('btn-play').textContent = '⏸ Pause';
+  const step = () => {
+    if (!playing) return;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(frames[playIndex], 0, 0);
+    highlight(playIndex);
+    playIndex = (playIndex + 1) % frames.length;
+    playTimer = setTimeout(step, 1000 / fps);
+  };
+  step();
+}
+
+function pause() {
+  playing = false;
+  clearTimeout(playTimer);
+  document.getElementById('btn-play').textContent = '▶ Abspielen';
+  render();
+  refreshTimeline();
+}
+
+function highlight(i) {
+  const tl = document.getElementById('timeline');
+  [...tl.querySelectorAll('.frame-thumb')].forEach((d, k) =>
+    d.classList.toggle('active', k === i));
+}
+
+let drawing = false;
+let px = 0, py = 0, sx = 0, sy = 0;
+let last = null;
+
+function evPos(e) {
+  const r = editor.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+}
+
+const fctx = () => frames[current].getContext('2d');
+
+editor.addEventListener('pointerdown', e => {
+  if (playing) return;
+  editor.setPointerCapture(e.pointerId);
+  const p = evPos(e);
+  px = sx = p.x; py = sy = p.y;
+  last = p;
+  if (tool === 'fill') {
+    snapshot();
+    floodFill(Math.floor(p.x), Math.floor(p.y));
+    return;
+  }
+  snapshot();
+  drawing = true;
+  drawDot(p);
+});
+
+editor.addEventListener('pointermove', e => {
+  if (playing) return;
+  if (!drawing) return;
+  const p = evPos(e);
+  stroke(p);
+  last = p;
+});
+
+editor.addEventListener('pointerup', e => {
+  if (drawing) {
+    drawing = false;
+    bumpStamp();
+    updateThumb(current);
+    refreshTimeline();
+  }
+});
+
+function brushStyle(c) {
+  const fc = fctx();
+  fc.lineJoin = fc.lineCap = 'round';
+  const eraser = tool === 'eraser';
+  if (eraser) {
+    c.globalCompositeOperation = 'destination-out';
+    c.globalAlpha = 1;
+    c.strokeStyle = 'rgba(0,0,0,1)';
+    c.fillStyle = 'rgba(0,0,0,1)';
+    return;
+  }
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = tool === 'marker' ? 0.45 * alpha : alpha;
+  c.strokeStyle = tool === 'brush' ? color : color;
+  c.fillStyle = color;
+}
+
+function drawDot(p) {
+  const c = fctx();
+  brushStyle(c);
+  c.beginPath();
+  if (tool === 'marker') {
+    c.lineWidth = size * 3;
+    c.lineCap = 'butt';
+  } else if (tool === 'pencil') {
+    c.lineWidth = size * 0.8;
+  } else {
+    c.lineWidth = size;
+  }
+  c.arc(p.x, p.y, c.lineWidth / 2, 0, Math.PI * 2);
+  c.fill();
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = 1;
+  render();
+}
+
+function stroke(p) {
+  const c = fctx();
+  brushStyle(c);
+  if (tool === 'pencil') {
+    const steps = Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / 2) || 1;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = last.x + (p.x - last.x) * t + (Math.random() - 0.5) * size * 0.7;
+      const y = last.y + (p.y - last.y) * t + (Math.random() - 0.5) * size * 0.7;
+      c.globalAlpha = alpha * (0.25 + Math.random() * 0.45);
+      c.beginPath();
+      c.lineWidth = size * (0.45 + Math.random() * 0.4);
+      c.arc(x, y, c.lineWidth / 2, 0, Math.PI * 2);
+      c.fill();
+    }
+  } else if (tool === 'marker') {
+    c.lineWidth = size * 3;
+    c.lineCap = 'butt';
+    c.lineJoin = 'miter';
+    c.beginPath();
+    c.moveTo(last.x, last.y);
+    c.lineTo(p.x, p.y);
+    c.stroke();
+  } else {
+    c.lineWidth = size;
+    c.beginPath();
+    c.moveTo(last.x, last.y);
+    c.lineTo(p.x, p.y);
+    c.stroke();
+  }
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = 1;
+  bumpStamp();
+  render();
+}
+
+let fillTolerance = 32;
+function floodFill(x, y) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  const c = fctx();
+  const img = c.getImageData(0, 0, W, H);
+  const d = img.data;
+  const start = (y * W + x) * 4;
+  const target = [d[start], d[start + 1], d[start + 2], d[start + 3]];
+  let rgb = hexToRgb(toHex(color));
+  if (color.startsWith('hsl')) {
+    const m = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    if (m) rgb = hslToRgb(+m[1], +m[2] / 100, +m[3] / 100);
+  }
+  const fillA = Math.round(alpha * 255);
+  if (isMatch(start)) return;
+  const stack = [[x, y]];
+  const seen = new Uint8Array(W * H);
+  seen[y * W + x] = 1;
+  while (stack.length) {
+    const [cx, cy] = stack.pop();
+    const i = (cy * W + cx) * 4;
+    d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = fillA;
+    const push = (nx, ny) => {
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) return;
+      const si = ny * W + nx;
+      if (seen[si]) return;
+      if (!isMatch(si * 4)) return;
+      seen[si] = 1;
+      stack.push([nx, ny]);
+    };
+    push(cx + 1, cy); push(cx - 1, cy); push(cx, cy + 1); push(cx, cy - 1);
+  }
+  c.putImageData(img, 0, 0);
+  bumpStamp();
+  updateThumb(current);
+  render();
+  refreshTimeline();
+
+  function isMatch(i) {
+    const t = fillTolerance;
+    return Math.abs(d[i] - target[0]) <= t &&
+           Math.abs(d[i + 1] - target[1]) <= t &&
+           Math.abs(d[i + 2] - target[2]) <= t &&
+           Math.abs(d[i + 3] - target[3]) <= t;
+  }
+}
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)];
+}
+
+function hslToRgb(h, s, l) {
+  const a = s * Math.min(l, 1 - l);
+  const f = n => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+  };
+  return [Math.round(255 * f(0)), Math.round(255 * f(8)), Math.round(255 * f(4))];
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  const map = { b: 'pen', p: 'pencil', s: 'brush', m: 'marker', e: 'eraser', f: 'fill' };
+  const k = e.key.toLowerCase();
+  if (map[k]) { setTool(map[k]); return; }
+  if (e.key === 'ArrowLeft') goto(current - 1);
+  if (e.key === 'ArrowRight') goto(current + 1);
+  if (e.key === 'n') addFrame(false);
+  if (e.key === ' ' && !playing) { e.preventDefault(); play(); }
+  else if (e.key === ' ' && playing) { e.preventDefault(); pause(); }
+});
+
+document.getElementById('btn-play').onclick = () => playing ? pause() : play();
+document.getElementById('btn-prev').onclick = () => goto(current - 1);
+document.getElementById('btn-next').onclick = () => goto(current + 1);
+document.getElementById('btn-first').onclick = () => goto(0);
+document.getElementById('btn-dup').onclick = () => addFrame(true);
+document.getElementById('btn-clear').onclick = clearFrame;
+document.getElementById('btn-del').onclick = deleteFrame;
+document.getElementById('btn-help').onclick = () => document.getElementById('helpdlg').showModal();
+
+document.getElementById('size').oninput = e => {
+  size = +e.target.value;
+  document.getElementById('size-val').textContent = size + ' px';
+};
+document.getElementById('opacity').oninput = e => {
+  alpha = +e.target.value / 100;
+  document.getElementById('opacity-val').textContent = e.target.value + ' %';
+};
+document.getElementById('color').oninput = e => color = e.target.value;
+document.getElementById('fps').oninput = e => {
+  fps = +e.target.value;
+  document.getElementById('fps-val').textContent = fps + ' FPS';
+};
+document.getElementById('onion').onchange = e => { onion = e.target.checked; render(); };
+document.getElementById('onion-count').oninput = e => {
+  onionCount = +e.target.value;
+  document.getElementById('onion-count-val').textContent = onionCount;
+  render();
+};
+
+document.getElementById('btn-save').onclick = () => {
+  const data = {
+    app: 'ToonStudio', version: 1, fps,
+    frames: frames.map(f => f.toDataURL('image/png'))
+  };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'toonstudio-projekt.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Projekt gespeichert.');
+};
+
+document.getElementById('btn-load').onclick = () => document.getElementById('file-input').click();
+document.getElementById('file-input').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    try {
+      const data = JSON.parse(fr.result);
+      if (data.app !== 'ToonStudio') throw new Error('falsches Format');
+      loadProject(data);
+      toast('Projekt geladen.');
+    } catch {
+      toast('Datei konnte nicht gelesen werden.');
+    }
+  };
+  fr.readAsText(file);
+  e.target.value = '';
+};
+
+function loadProject(data) {
+  pause();
+  let done = 0;
+  const loaded = [];
+  data.frames.forEach(src => {
+    const c = makeFrame();
+    const img = new Image();
+    img.onload = () => {
+      c.getContext('2d').drawImage(img, 0, 0);
+      done++;
+      if (done === data.frames.length) {
+        frames = loaded;
+        current = 0;
+        if (data.fps) { fps = data.fps; document.getElementById('fps').value = fps; document.getElementById('fps-val').textContent = fps + ' FPS'; }
+        frames.forEach((f, i) => updateThumb(i));
+        render();
+        refreshTimeline();
+      }
+    };
+    img.src = src;
+    loaded.push(c);
+  });
+}
+
+document.getElementById('btn-export').onclick = () => {
+  if (frames.length < 1) return;
+  if (!('MediaRecorder' in window)) { toast('Dein Browser unterstützt keinen Videoexport.'); return; }
+  pause();
+  toast('Video wird aufgenommen …');
+  const ec = document.createElement('canvas');
+  ec.width = W; ec.height = H;
+  const ectx = ec.getContext('2d');
+  const stream = ec.captureStream(fps);
+  const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 });
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'zeichentrick.webm';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Video exportiert!');
+  };
+  ectx.fillStyle = '#fff';
+  ectx.fillRect(0, 0, W, H);
+  rec.start();
+  let i = 0;
+  const hold = Math.max(2, Math.round(fps / 2));
+  const drawNext = () => {
+    if (i >= frames.length) {
+      setTimeout(() => rec.stop(), 200);
+      return;
+    }
+    ectx.fillStyle = '#fff';
+    ectx.fillRect(0, 0, W, H);
+    ectx.drawImage(frames[i], 0, 0);
+    i++;
+    setTimeout(drawNext, 1000 / fps);
+  };
+  drawNext();
+};
+
+document.getElementById('btn-png').onclick = () => {
+  frames.forEach((f, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = f.toDataURL('image/png');
+      a.download = `folie-${String(i + 1).padStart(3, '0')}.png`;
+      a.click();
+    }, i * 250);
+  });
+  toast('PNG-Dateien werden heruntergeladen …');
+};
+
+frames = [makeFrame()];
+buildToolbar();
+buildSwatches();
+setTool('pen');
+fitCanvas();
+render();
+refreshTimeline();
+if (!sessionStorage.getItem('toon-welcomed')) {
+  sessionStorage.setItem('toon-welcomed', '1');
+  document.getElementById('helpdlg').showModal();
+}
+</script>
+</body>
+</html>
